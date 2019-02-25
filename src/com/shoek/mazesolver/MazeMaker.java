@@ -58,7 +58,7 @@ public class MazeMaker {
 
     public static final int MAX_HEIGHT = 1001;
     public static final int MAX_WIDTH = 1001;
-    public static final int MAX_GROWTH = 100;
+    public static final int MAX_SIMPLICITY = 100;
     public static final char WALL = '#';
     public static final char ROAD = '.';
     public static final char START = 'S';
@@ -73,11 +73,12 @@ public class MazeMaker {
 
         int h = cin.nextInt();
         int w = cin.nextInt();
-        int g = cin.nextInt();
+        int s = cin.nextInt();
+        int c = cin.nextInt();
 
         try {
 
-            char[][] maze = make(h, w, g);
+            char[][] maze = make(h, w, s, c);
 
             for (char[] line : maze)
                 cout.println(String.valueOf(line));
@@ -86,17 +87,16 @@ public class MazeMaker {
             StringWriter sw = new StringWriter();
             PrintWriter pw = new PrintWriter(sw);
             e.printStackTrace(pw);
-            String s = sw.toString();
-            cout.println(s);
+            String st = sw.toString();
+            cout.println(st);
         }
 
         cout.flush();
     }
 
-    public static char[][] make(int height, int width, int growth) {
+    public static char[][] make(int height, int width, int simplicity, int circuits) {
         final int h = height; // 縦幅
         final int w = width; // 横幅
-        final int g = growth; // 一本道になりやすさ（experimental）
 
         if (3 > h || h > MAX_HEIGHT || h % 2 == 0) {
             System.out.println("3 <= height <= " + MAX_HEIGHT + " の奇数のみ入力可能です");
@@ -110,8 +110,12 @@ public class MazeMaker {
             System.out.println("開始地点と終了地点を置けません（周囲１マスは外周で、壁になります）");
             return new char[0][0];
         }
-        if (0 > g || g > MAX_GROWTH) {
-            System.out.println("0 <= growth <= " + MAX_GROWTH + " のみ入力可能です");
+        if (0 > simplicity || simplicity > MAX_SIMPLICITY) {
+            System.out.println("0 <= simplicity <= " + MAX_SIMPLICITY + " のみ入力可能です");
+            return new char[0][0];
+        }
+        if (0 > circuits) {
+            System.out.println("0 <= circuits のみ入力可能です");
             return new char[0][0];
         }
 
@@ -177,14 +181,13 @@ public class MazeMaker {
                 // 厳密に言うと「掘る開始地点リスト」はリストでなく優先度キューです
                 // 中身が常時ソートされた状態になっており、指定した順番で処理するのに効率がいいです
                 int priority;
-                if (rand.nextInt(g + MAX_GROWTH) < MAX_GROWTH) {
+                if (rand.nextInt(MAX_SIMPLICITY) < simplicity) {
+                    // 今回に掘った道の続きを最優先で掘ります
+                    priority = -1;
+                } else {
                     // p[2]の小さいやつから処理します
                     // ＝今までに掘った道から適当に選んで次の道を掘ります
                     priority = rand.nextInt(INF);
-                } else {
-                    // 今回に掘った道の続きを最優先で掘ります
-                    // この辺りで引数growthを上手いこと使いたい（願望）
-                    priority = -1;
                 }
 
                 // 掘った先を掘る開始地点リストに追加します
@@ -200,13 +203,25 @@ public class MazeMaker {
         // （６）掘る開始地点リストが空になったら終わりです、お疲れ様
 
         // （７）仕上げ１：外周をただの壁に戻します
+        Arrays.fill(maze[0], WALL);
+        Arrays.fill(maze[h - 1], WALL);
+        for (int i = 0; i < h; i++) {
+            maze[i][0] = WALL;
+            maze[i][w - 1] = WALL;
+        }
+
+        // 壁、道カウント
         int roadsCount = 0;
-        for (char[] line : maze) {
-            for (int i = line.length - 1; i >= 0; i--) {
+        int wallsCount = 0;
+        for (int j = h - 2; j >= 1; j--) {
+            char[] line = maze[j];
+            for (int i = line.length - 2; i >= 1; i--) {
                 if (line[i] == TEMP_STOPPER)
                     line[i] = WALL;
                 if (line[i] == ROAD)
                     roadsCount += 1;
+                if (line[i] == WALL)
+                    wallsCount += 1;
             }
         }
 
@@ -215,16 +230,34 @@ public class MazeMaker {
         int endPoint = rand.nextInt(roadsCount);
         while (startPoint == endPoint)
             endPoint = rand.nextInt(roadsCount);
-        roadsCount = 0;
-        for (char[] line : maze) {
-            for (int i = line.length - 1; i >= 0; i--) {
+        int road = 0;
+        for (int j = h - 2; j >= 1; j--) {
+            char[] line = maze[j];
+            for (int i = line.length - 2; i >= 1; i--) {
                 if (line[i] != ROAD)
                     continue;
-                if (roadsCount == startPoint)
+                if (road == startPoint)
                     line[i] = START;
-                if (roadsCount == endPoint)
+                if (road == endPoint)
                     line[i] = GOAL;
-                roadsCount += 1;
+                road += 1;
+            }
+        }
+
+        // （９）仕上げ３：適当な壁に道を開けます
+        // （作成直後の迷路には閉路＝回り道がありません）
+        Set<Integer> c = new HashSet<>(circuits);
+        for (int i = 0; i < circuits; i++)
+            c.add(rand.nextInt(wallsCount));
+        int wall = 0;
+        for (int j = h - 2; j >= 1; j--) {
+            char[] line = maze[j];
+            for (int i = line.length - 2; i >= 1; i--) {
+                if (line[i] != WALL)
+                    continue;
+                if (c.contains(wall))
+                    line[i] = ROAD;
+                wall += 1;
             }
         }
 
