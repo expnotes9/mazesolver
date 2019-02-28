@@ -27,7 +27,7 @@ package com.shoek.mazesolver;
 import java.io.*;
 import java.util.*;
 
-public class MazeMaker {
+public class Maze {
 
     static class FastScanner {
         private BufferedReader br;
