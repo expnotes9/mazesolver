@@ -29,35 +29,8 @@ import java.util.*;
 
 public class Maze {
 
-    static class FastScanner {
-        private BufferedReader br;
-        private StringTokenizer st;
-
-        FastScanner() {
-            br = new BufferedReader(new InputStreamReader(System.in));
-        }
-
-        String next() {
-            while (st == null || !st.hasMoreElements())
-                try {
-                    st = new StringTokenizer(br.readLine());
-                } catch (IOException e) {
-                    throw new IllegalStateException(e);
-                }
-            return st.nextToken();
-        }
-
-        int nextInt() {
-            return Integer.parseInt(next());
-        }
-
-        long nextLong() {
-            return Long.parseLong(next());
-        }
-    }
-
-    public static final int MAX_HEIGHT = 1001;
-    public static final int MAX_WIDTH = 1001;
+    public static final int MAX_HEIGHT = 2001;
+    public static final int MAX_WIDTH = 2001;
     public static final int MAX_SIMPLICITY = 100;
     public static final char WALL = '#';
     public static final char ROAD = '.';
@@ -68,27 +41,30 @@ public class Maze {
     private static final int INF = Integer.MAX_VALUE;
 
     public static void main(String args[]) {
-        FastScanner cin = new FastScanner();
+
+        Scanner scn = new Scanner(System.in);
         PrintWriter cout = new PrintWriter(System.out);
 
-        int h = cin.nextInt();
-        int w = cin.nextInt();
-        int s = cin.nextInt();
-        int c = cin.nextInt();
+        int height = scn.nextInt();
+        int width = scn.nextInt();
+        int simplicity = scn.nextInt();
+        int circuits = scn.nextInt();
+        boolean debug = Objects.equals("-d", scn.next());
 
-        try {
+        char[][] maze = make(height, width, simplicity, circuits);
 
-            char[][] maze = make(h, w, s, c);
-
+        if (debug) {
+            cout.println("make:");
             for (char[] line : maze)
                 cout.println(String.valueOf(line));
+        }
 
-        } catch (Throwable e) {
-            StringWriter sw = new StringWriter();
-            PrintWriter pw = new PrintWriter(sw);
-            e.printStackTrace(pw);
-            String st = sw.toString();
-            cout.println(st);
+        shortestPath(maze);
+
+        if (debug) {
+            cout.println("shortestPath:");
+            for (char[] line : maze)
+                cout.println(String.valueOf(line));
         }
 
         cout.flush();
@@ -142,7 +118,8 @@ public class Maze {
 
         // 掘る開始地点リスト
         // （初期サイズh*w/32は適当。最大サイズ < h*w/4なのは間違いない）
-        PriorityQueue<int[]> q = new PriorityQueue<>(h * w / 32, (arr1, arr2) -> Integer.compare(arr1[2], arr2[2]));
+        PriorityQueue<int[]> q = new PriorityQueue<>(Math.max(1, h * w / 32),
+                (arr1, arr2) -> Integer.compare(arr1[2], arr2[2]));
 
         // （２）真ん中辺りの奇数マスに道を開けます
         int[] stt = { h / 4 * 2 + 1, w / 4 * 2 + 1, 0 };
@@ -263,6 +240,113 @@ public class Maze {
 
         // ありがとうございました
         return maze;
+    }
+
+    public static void shortestPath(char[][] maze) {
+        // 最短経路を探してmazeを書き換えます（破壊的動作）
+
+        final int h = maze.length; // 縦幅
+        final int w = maze[0].length; // 横幅
+
+        // 上下左右
+        int[] dy = { 0, -1, 0, 1 };
+        int[] dx = { -1, 0, 1, 0 };
+        int dn = dx.length;
+
+        // 最短距離メモvis[i][j] = 開始地点からmaze[i][j]に到達するまでの最短距離
+        int[][] vis = new int[h][w];
+        for (int[] v : vis)
+            Arrays.fill(v, -1); // 全部、未計算
+
+        int[] s = null;
+        int[] g = null;
+        for (int i = 0; i < h; i++) {
+            for (int j = 0; j < w; j++) {
+                switch (maze[i][j]) {
+                case START:
+                    // （１）開始地点を検出します、３つ目の数は開始地点からの最短距離です
+                    s = new int[] { i, j, 0 };
+                    break;
+                case GOAL:
+                    // （２）終了地点も検出します、ついでに一時的に道扱いします
+                    maze[i][j] = ROAD;
+                    g = new int[] { i, j };
+                    break;
+                case WALL:
+                    // （３）壁マスは到達不可能（超長距離）としておきます
+                    vis[i][j] = INF;
+                    break;
+                default:
+                }
+            }
+        }
+        if (s == null || g == null) {
+            throw new IllegalArgumentException("開始地点" + START + "または終了地点" + GOAL + "がありません");
+        }
+
+        // （２）開始地点をキューに入れます
+
+        // アルゴリズムの世界でキューとはFIFO（先入先出法）を指し、
+        // それ以外はキューと呼びません
+        // つまり出す時はq.pollFirst()の位置のデータを出し、
+        // 入れる時はq.addLast()の位置に入れます
+        ArrayDeque<int[]> q = new ArrayDeque<>();
+        q.add(s);
+        vis[s[0]][s[1]] = 0;
+
+        outer: while (q.isEmpty() == false) {
+
+            // （３）キューから取得します
+            int[] p = q.pollFirst();
+            int y = p[0];
+            int x = p[1];
+            int m = p[2];
+            vis[y][x] = m;
+            if (y == g[0] && x == g[1]) {
+                // （４）ゴールしてたら終了。
+                break outer;
+            }
+
+            // （５）分身の術！
+            for (int d = 0; d < dn; d++) {
+                // 隣のマスが
+                int ny = y + dy[d];
+                int nx = x + dx[d];
+                if (vis[ny][nx] != -1)
+                    // 未計算でなければ別の隣のマスを探します
+                    continue;
+                // 未計算の場合＝行ったことない道かゴールの場合
+                int[] np = new int[] { ny, nx, 1 + m };
+                // （６）ここに分身を置いておこう
+                q.addLast(np);
+            }
+        }
+        q.clear();
+
+        // 最短距離をmazeに書き込みましょう
+
+        // （７）終了地点から初めて、開始地点に戻るまで
+        int[] p = Arrays.copyOf(g, g.length);
+        while (p[0] != s[0] || p[1] != s[1]) {
+            int y = p[0];
+            int x = p[1];
+            for (int d = 0; d < dn; d++) {
+                int ny = y + dy[d];
+                int nx = x + dx[d];
+                if (vis[ny][nx] + 1 != vis[y][x])
+                    continue;
+                // （８）最短距離の1桁目、0~9を書きこんで
+                maze[y][x] = (char) (vis[y][x] % 10 + '0');
+                // （９）一歩戻ります
+                p[0] = ny;
+                p[1] = nx;
+                break;
+            }
+        }
+
+        // 終了地点をマークに戻して
+        maze[g[0]][g[1]] = GOAL;
+        // お疲れ様
     }
 
 }
